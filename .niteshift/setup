@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+# shellcheck source=postgres.sh
+. .niteshift/postgres.sh
+
+# `pnpm dev` runs through dotenv-cli, so a .env file is required. It is gitignored,
+# and only holds local development values.
+if [ ! -f .env ]; then
+  cat > .env <<'ENV'
+DATABASE_URL=postgresql://umami:umami@localhost:5432/umami
+APP_SECRET=niteshift-dev-secret
+ALLOWED_FRAME_URLS=https://niteshift.dev https://*.niteshift.dev
+ENV
+fi
+
+pnpm install --frozen-lockfile
+
+ensure_postgres
+
+pnpm build-db          # prisma generate + copy client into src/generated
+pnpm update-db         # prisma migrate deploy (seeds the default admin user)
+
+pnpm build-tracker-script   # public/script.js
+pnpm build-recorder         # public/recorder.js
+pnpm build-geo || echo "geo database download failed; continuing without geo lookups"

@@ -1,0 +1,4 @@
+services:
+  - name: web
+    command: pnpm dev
+    port: 3000

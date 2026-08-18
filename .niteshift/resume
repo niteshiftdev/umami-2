@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+# shellcheck source=postgres.sh
+. .niteshift/postgres.sh
+
+# The database container does not necessarily come back with the sandbox.
+ensure_postgres
