@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly UMAMI_DATABASE_URL='postgresql://umami:umami@localhost:5432/umami'
+readonly UMAMI_APP_SECRET='niteshift-local-development-secret'
+readonly NITESHIFT_FRAME_ANCESTORS='https://niteshift.dev https://*.niteshift.dev'
+readonly NITESHIFT_COMPOSE_OVERRIDE='docker-compose.niteshift.yml'
+readonly TRACKER_TYPES_FILE='src/tracker/index.d.ts'
+
+TRACKER_TYPES_BACKUP="$(mktemp)"
+cp "$TRACKER_TYPES_FILE" "$TRACKER_TYPES_BACKUP"
+
+restore_tracker_types() {
+  cp "$TRACKER_TYPES_BACKUP" "$TRACKER_TYPES_FILE"
+  rm -f "$TRACKER_TYPES_BACKUP"
+}
+
+trap restore_tracker_types EXIT
+
+cat > "$NITESHIFT_COMPOSE_OVERRIDE" <<'YAML'
+services:
+  db:
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+YAML
+
+if ! grep -qxF "$NITESHIFT_COMPOSE_OVERRIDE" .git/info/exclude; then
+  printf '\n%s\n' "$NITESHIFT_COMPOSE_OVERRIDE" >> .git/info/exclude
+fi
+
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+
+ns services start database
+timeout 60 bash -c \
+  'until docker compose -f docker-compose.yml -f docker-compose.niteshift.yml exec -T db pg_isready -U umami -d umami >/dev/null 2>&1; do sleep 1; done'
+
+DATABASE_URL="$UMAMI_DATABASE_URL" \
+APP_SECRET="$UMAMI_APP_SECRET" \
+ALLOWED_FRAME_URLS="$NITESHIFT_FRAME_ANCESTORS" \
+pnpm build
+
+restore_tracker_types
+trap - EXIT

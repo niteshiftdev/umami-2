@@ -1,0 +1,17 @@
+services:
+  - name: database
+    command: docker compose -f docker-compose.yml -f docker-compose.niteshift.yml up db
+    restart: always
+    stopGracePeriod: 30s
+  - name: web
+    command: pnpm dev
+    port: 3000
+    restart: always
+    stopGracePeriod: 15s
+    environment:
+      - name: DATABASE_URL
+        value: postgresql://umami:umami@localhost:5432/umami
+      - name: APP_SECRET
+        value: niteshift-local-development-secret
+      - name: ALLOWED_FRAME_URLS
+        value: "https://niteshift.dev https://*.niteshift.dev"
