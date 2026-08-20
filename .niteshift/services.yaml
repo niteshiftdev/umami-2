@@ -1,0 +1,21 @@
+services:
+  # PostgreSQL for local development. Matches the image and credentials used by
+  # the project's docker-compose.yml; the connection string lives in .env, which
+  # .niteshift/setup writes.
+  - name: db
+    command: |
+      docker rm -f umami-postgres >/dev/null 2>&1 || true
+      exec docker run --rm --name umami-postgres \
+        -p 5432:5432 \
+        -e POSTGRES_DB=umami \
+        -e POSTGRES_USER=umami \
+        -e POSTGRES_PASSWORD=umami \
+        -v umami-db-data:/var/lib/postgresql/data \
+        postgres:15-alpine
+    stopGracePeriod: 30s
+
+  # Next.js dev server with hot reloading. `pnpm dev` is `dotenv next dev --turbo`,
+  # so it reads DATABASE_URL, APP_SECRET and ALLOWED_FRAME_URLS from .env.
+  - name: web
+    command: pnpm dev
+    port: 3000

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Recovery for a resumed sandbox: restore .env, generated assets, and schema.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+DATABASE_URL="postgresql://umami:umami@localhost:5432/umami"
+APP_SECRET="niteshift-umami-dev-secret"
+ALLOWED_FRAME_URLS="https://niteshift.dev https://*.niteshift.dev"
+ALLOWED_DEV_ORIGINS="**.preview.niteshift.dev,**.preview.stage.niteshift.dev"
+
+cat > .env <<EOF
+DATABASE_URL=${DATABASE_URL}
+APP_SECRET=${APP_SECRET}
+ALLOWED_FRAME_URLS=${ALLOWED_FRAME_URLS}
+ALLOWED_DEV_ORIGINS=${ALLOWED_DEV_ORIGINS}
+EOF
+
+# Gitignored build output; rebuild only what the resumed filesystem is missing.
+[ -d src/generated/prisma ] || pnpm build-db
+[ -f public/script.js ] || pnpm build-tracker-script
+[ -f public/recorder.js ] || pnpm build-recorder
+[ -f geo/GeoLite2-City.mmdb ] || pnpm build-geo
+
+# The branch may have gained migrations since the sandbox was suspended.
+ns services start db
+for _ in $(seq 1 90); do
+  if docker exec umami-postgres pg_isready -U umami -d umami >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+docker exec umami-postgres pg_isready -U umami -d umami
+pnpm check-db

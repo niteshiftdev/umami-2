@@ -11,6 +11,10 @@ const RECORDER_SCRIPT = '/recorder.js';
 const isProd = process.env.NODE_ENV === 'production';
 const isVercel = Boolean(process.env.VERCEL);
 
+const allowedDevOrigins = (process.env.ALLOWED_DEV_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
 const apiUrl = process.env.API_URL || '';
 const basePath = process.env.BASE_PATH || '';
 const cloudMode = process.env.CLOUD_MODE || '';
@@ -219,6 +223,7 @@ export default withNextIntl({
     selfTrack,
     selfRecord,
   },
+  allowedDevOrigins,
   basePath,
   output: isVercel ? undefined : 'standalone',
   typescript: {
