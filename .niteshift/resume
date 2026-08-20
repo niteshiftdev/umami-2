@@ -32,3 +32,18 @@ for _ in $(seq 1 90); do
 done
 docker exec umami-postgres pg_isready -U umami -d umami
 pnpm check-db
+
+# Mint a fresh browser session for this task's preview (see .niteshift/setup).
+AUTH_STATE_FILE="/tmp/agent-browser-state.json"
+rm -f "$AUTH_STATE_FILE"
+ns services start web web-auth
+for _ in $(seq 1 90); do
+  if [ -s "$AUTH_STATE_FILE" ]; then
+    break
+  fi
+  sleep 2
+done
+if [ ! -s "$AUTH_STATE_FILE" ]; then
+  echo "web-auth did not write $AUTH_STATE_FILE; see: ns services logs web-auth" >&2
+  exit 1
+fi

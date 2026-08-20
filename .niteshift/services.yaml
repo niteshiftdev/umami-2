@@ -19,3 +19,31 @@ services:
   - name: web
     command: pnpm dev
     port: 3000
+
+  # Browser auth for the `web` service: logs in as the admin user that
+  # `prisma migrate deploy` seeds and writes a Playwright storage-state file, so
+  # agent-browser and preview viewers land on the app instead of the login form.
+  # Umami keeps its session in localStorage under `umami.auth` (the API only
+  # reads `Authorization: Bearer`), and the state file needs at least one cookie
+  # to name the domain the localStorage entry belongs to, so the token is written
+  # both ways, for the preview origin first and localhost second.
+  # NITESHIFT_PORT_3000_URL is absent until services.yaml is committed, in which
+  # case only localhost is written. It mints once and exits, so it is on demand
+  # rather than autostart:
+  # an autostart service that exits leaves `ns services status` permanently
+  # Degraded. `.niteshift/setup` and `.niteshift/resume` start it.
+  - name: web-auth
+    command: |
+      set -euo pipefail
+      curl -sf --retry 60 --retry-connrefused --retry-delay 2 -o /dev/null http://localhost:3000/api/heartbeat
+      token=$(curl -sf -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"umami"}' | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const t=JSON.parse(s).token;if(!t){console.error("no token in login response");process.exit(1)}process.stdout.write(t)})')
+      mkdir -p "$(dirname "$AUTH_STATE_FILE")" /root/.niteshift/agent-browser
+      printf '%s\n' task-provisioned > /root/.niteshift/agent-browser/auth-strategy
+      node -e 'const fs=require("fs");const token=process.argv[1];const urls=[...new Set([process.env.NITESHIFT_PORT_3000_URL,"http://localhost:3000"].filter(Boolean))].map(url=>new URL(url));fs.writeFileSync(process.env.AUTH_STATE_FILE,JSON.stringify({cookies:urls.map(url=>({name:"umami.auth",value:token,domain:url.hostname,path:"/",expires:-1,httpOnly:false,secure:url.protocol==="https:",sameSite:"Lax"})),origins:urls.map(url=>({origin:url.origin,localStorage:[{name:"umami.auth",value:JSON.stringify(token)}]}))},null,2));console.log("wrote "+process.env.AUTH_STATE_FILE+" for "+urls.map(url=>url.origin).join(", "))' "$token"
+    autostart: false
+    restart: "no"
+    environment:
+      # agent-browser loads this file into the browser and Niteshift syncs it to
+      # the credential store that primes preview viewers.
+      - name: AUTH_STATE_FILE
+        value: /tmp/agent-browser-state.json
