@@ -49,19 +49,5 @@ pnpm build-recorder
 # ~65MB download, so only when the GeoIP database is missing.
 [ -f geo/GeoLite2-City.mmdb ] || pnpm build-geo
 
-# Browser auth. `web-auth` needs the app running to mint a session, so start both
-# here; `ns services up` adopts `web` right after. AUTH_STATE_FILE mirrors the
-# value declared for `web-auth` in .niteshift/services.yaml.
-AUTH_STATE_FILE="/tmp/agent-browser-state.json"
-rm -f "$AUTH_STATE_FILE"
-ns services start web web-auth
-for _ in $(seq 1 90); do
-  if [ -s "$AUTH_STATE_FILE" ]; then
-    break
-  fi
-  sleep 2
-done
-if [ ! -s "$AUTH_STATE_FILE" ]; then
-  echo "web-auth did not write $AUTH_STATE_FILE; see: ns services logs web-auth" >&2
-  exit 1
-fi
+# Browser auth is declared as `auth` on the `web` service in
+# .niteshift/services.yaml; Niteshift mints the session itself.

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Browser session for the `web` service, declared as its `auth` block in
+# .niteshift/services.yaml. Niteshift runs this from the repository root with
+# NITESHIFT_AUTH_STATE_FILE set, during provisioning, on resume, and whenever
+# the session needs refreshing. It can start before `web` is listening, hence
+# the heartbeat retry.
+set -euo pipefail
+
+: "${NITESHIFT_AUTH_STATE_FILE:?must be set by Niteshift}"
+
+APP_URL="http://localhost:${PORT:-3000}"
+
+curl -sf --retry 60 --retry-connrefused --retry-delay 2 -o /dev/null "$APP_URL/api/heartbeat"
+
+# The admin/umami login `prisma migrate deploy` seeds on a fresh database.
+curl -sf -X POST "$APP_URL/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"umami"}' |
+  APP_URL="$APP_URL" node -e '
+    // Umami keeps its session in localStorage under `umami.auth` (the API only
+    // reads `Authorization: Bearer`), and Playwright storage state needs a
+    // cookie to name the domain that localStorage belongs to, so write the
+    // token both ways, for the app origin and the preview origin.
+    let body = "";
+    process.stdin.on("data", (chunk) => (body += chunk)).on("end", () => {
+      const { token } = JSON.parse(body);
+      if (!token) throw new Error("no token in /api/auth/login response");
+
+      const origins = [
+        ...new Set([process.env.APP_URL, process.env.NITESHIFT_PORT_3000_URL].filter(Boolean)),
+      ].map((url) => new URL(url));
+
+      require("fs").writeFileSync(
+        process.env.NITESHIFT_AUTH_STATE_FILE,
+        JSON.stringify(
+          {
+            cookies: origins.map((url) => ({
+              name: "umami.auth",
+              value: token,
+              domain: url.hostname,
+              path: "/",
+              expires: -1,
+              httpOnly: false,
+              secure: url.protocol === "https:",
+              sameSite: "Lax",
+            })),
+            origins: origins.map((url) => ({
+              origin: url.origin,
+              localStorage: [{ name: "umami.auth", value: JSON.stringify(token) }],
+            })),
+          },
+          null,
+          2,
+        ),
+      );
+      console.log(`wrote ${process.env.NITESHIFT_AUTH_STATE_FILE} for ${origins.map((u) => u.origin).join(", ")}`);
+    });
+  '
