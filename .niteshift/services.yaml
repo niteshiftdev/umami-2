@@ -1,0 +1,32 @@
+services:
+  - name: db
+    # PostgreSQL from the repository's compose file, in the foreground so the
+    # supervisor owns it. Overrides live in docker-compose.niteshift.yml.
+    command: exec docker compose -f docker-compose.yml -f docker-compose.niteshift.yml up db
+    stopGracePeriod: 30s
+
+  - name: web
+    # Next.js dev server with hot reloading. Reads .env (rendered below).
+    command: |
+      for _ in $(seq 1 60); do
+        (exec 3<>/dev/tcp/127.0.0.1/5432) 2>/dev/null && break
+        sleep 1
+      done
+      exec pnpm dev
+    port: 3000
+
+envFiles:
+  # The dev server, Prisma, and the repository's scripts all read .env.
+  - path: .env
+    environment:
+      - name: DATABASE_URL
+        value: postgresql://umami:umami@localhost:5432/umami
+      # Dev-only signing key: its scope is this task's throwaway database.
+      - name: APP_SECRET
+        value: niteshift-dev-app-secret-not-for-production
+      # Lets the Niteshift preview panel embed the app in an iframe.
+      - name: ALLOWED_FRAME_URLS
+        value: https://niteshift.dev https://*.niteshift.dev
+      # Lets the preview host request /_next dev assets.
+      - name: ALLOWED_DEV_ORIGINS
+        value: "*.preview.niteshift.dev"
