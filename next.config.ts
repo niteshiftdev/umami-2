@@ -208,6 +208,10 @@ if (isProd && cloudMode) {
 /** @type {import('next').NextConfig} */
 export default withNextIntl({
   reactStrictMode: false,
+  allowedDevOrigins:
+    process.env.AMP_ORB && process.env.PUBLIC_URL
+      ? [new URL(process.env.PUBLIC_URL).hostname]
+      : undefined,
   env: {
     apiUrl,
     basePath,
