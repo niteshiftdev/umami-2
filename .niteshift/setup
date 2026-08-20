@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# One-shot setup for a fresh sandbox. Safe to re-run: every step is idempotent.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# Dev-only values, scoped to this sandbox. The Postgres instance is the `db`
+# service in .niteshift/services.yaml; APP_SECRET only signs sandbox sessions.
+DATABASE_URL="postgresql://umami:umami@localhost:5432/umami"
+APP_SECRET="niteshift-dev-app-secret"
+
+# The repo's CLI tooling (prisma, scripts/*.js) reads .env through dotenv, and
+# setup uses it before services start, so setup owns this file. It is gitignored.
+# Preview-specific variables live on the web service in services.yaml.
+cat > .env <<ENV
+DATABASE_URL=${DATABASE_URL}
+APP_SECRET=${APP_SECRET}
+DISABLE_TELEMETRY=1
+ENV
+
+pnpm install --frozen-lockfile
+
+# Postgres must be up before the client build and migrations.
+ns services start db
+for _ in $(seq 1 60); do
+  docker exec umami-db pg_isready -U umami -d umami >/dev/null 2>&1 && break
+  sleep 2
+done
+docker exec umami-db pg_isready -U umami -d umami
+
+pnpm build-db   # prisma generate + copy client
+pnpm check-db   # connection/version check + prisma migrate deploy
+
+# Assets the app serves at runtime. `build-tracker-script` instead of
+# `build-tracker`, because build-tracker-types rewrites the tracked
+# src/tracker/index.d.ts and would dirty the working tree.
+pnpm build-tracker-script
+pnpm build-recorder
+
+# ~60MB GeoLite2 download; keep it if a previous run already fetched it.
+if [ ! -f geo/GeoLite2-City.mmdb ]; then
+  pnpm build-geo
+fi

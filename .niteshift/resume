@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Runs on every resume, before services are restored.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# The db service runs a container, so the Docker daemon has to be answering first.
+for _ in $(seq 1 30); do
+  docker info >/dev/null 2>&1 && break
+  sleep 2
+done
+
+# Apply any migrations that arrived while the sandbox was suspended.
+ns services start db
+for _ in $(seq 1 60); do
+  docker exec umami-db pg_isready -U umami -d umami >/dev/null 2>&1 && break
+  sleep 2
+done
+pnpm check-db

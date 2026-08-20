@@ -1,0 +1,32 @@
+services:
+  - name: db
+    # Foreground container; `ns` supervises `docker run` and the data lives in a
+    # named volume so it survives resumes.
+    command: |
+      docker rm -f umami-db >/dev/null 2>&1 || true
+      docker volume create umami-db-data >/dev/null
+      exec docker run --rm --name umami-db \
+        -p 5432:5432 \
+        -e POSTGRES_DB=umami \
+        -e POSTGRES_USER=umami \
+        -e POSTGRES_PASSWORD=umami \
+        -v umami-db-data:/var/lib/postgresql/data \
+        postgres:15-alpine
+    stopGracePeriod: 30s
+  - name: web
+    command: pnpm dev
+    port: 3000
+    environment:
+      - name: DATABASE_URL
+        value: postgresql://umami:umami@localhost:5432/umami
+      # Dev-only signing key: scoped to this sandbox, never a production secret.
+      - name: APP_SECRET
+        value: niteshift-dev-app-secret
+      # Lets the Niteshift preview panel iframe the app (frame-ancestors).
+      - name: ALLOWED_FRAME_URLS
+        value: https://niteshift.dev https://*.niteshift.dev
+      # Lets the Next dev server accept requests from the preview host.
+      - name: ALLOWED_DEV_ORIGINS
+        value: "*.preview.niteshift.dev"
+      - name: DISABLE_TELEMETRY
+        value: "1"
