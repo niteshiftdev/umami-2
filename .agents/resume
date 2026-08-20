@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v pg_lsclusters >/dev/null 2>&1; then
+  version="$(pg_lsclusters --no-header | awk '$2 == "main" { print $1; exit }')"
+  if [[ -n "$version" ]] && ! pg_lsclusters --no-header | awk '$2 == "main" && $4 == "online" { found=1 } END { exit !found }'; then
+    echo 'Starting PostgreSQL...'
+    sudo pg_ctlcluster "$version" main start
+  fi
+fi

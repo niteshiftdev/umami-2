@@ -37,6 +37,7 @@ pm2.yml
 .tool-versions
 .claude
 .agents
+.amp/portals/*
 tmpclaude*
 CLAUDE.md
 nul

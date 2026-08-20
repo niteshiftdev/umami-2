@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+step() {
+  local label="$1"
+  shift
+  local started=$SECONDS
+  printf '\n==> %s\n' "$label"
+  "$@"
+  printf '<== %s (%ss)\n' "$label" "$((SECONDS - started))"
+}
+
+install_node() {
+  if [[ "$(node --version)" != v22.* ]]; then
+    npm install --global n@10.2.0
+    N_PREFIX="$HOME/.local" n 22
+    hash -r
+  fi
+
+  npm install --global pnpm@10.15.1
+}
+
+install_postgres() {
+  if ! dpkg-query -W -f='${Status}' postgresql 2>/dev/null | grep -q 'install ok installed'; then
+    sudo apt-get update
+    sudo apt-get install -y postgresql
+  fi
+}
+
+start_postgres() {
+  local version
+  version="$(pg_lsclusters --no-header | awk '$2 == "main" { print $1; exit }')"
+  if [[ -z "$version" ]]; then
+    echo 'PostgreSQL main cluster was not created.' >&2
+    return 1
+  fi
+
+  if ! pg_lsclusters --no-header | awk '$2 == "main" && $4 == "online" { found=1 } END { exit !found }'; then
+    sudo pg_ctlcluster "$version" main start
+  fi
+
+  if [[ "$(sudo -u postgres psql -tAc 'SHOW fsync')" != off ]]; then
+    sudo -u postgres psql -v ON_ERROR_STOP=1 <<'SQL'
+ALTER SYSTEM SET fsync = off;
+ALTER SYSTEM SET synchronous_commit = off;
+SQL
+    sudo pg_ctlcluster "$version" main restart
+  fi
+}
+
+prepare_database() {
+  sudo -u postgres psql -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'umami') THEN
+    CREATE ROLE umami LOGIN PASSWORD 'umami';
+  ELSE
+    ALTER ROLE umami WITH LOGIN PASSWORD 'umami';
+  END IF;
+END
+$$;
+SQL
+
+  if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'umami'" | grep -q 1; then
+    sudo -u postgres createdb --owner=umami umami
+  fi
+
+  if [[ ! -f .env ]]; then
+    printf '%s\n' 'DATABASE_URL=postgresql://umami:umami@localhost:5432/umami' > .env
+  fi
+}
+
+step 'Install Node.js 22 and pnpm 10.15.1' install_node
+step 'Install PostgreSQL' install_postgres
+step 'Start and tune PostgreSQL' start_postgres
+step 'Prepare the development database' prepare_database
+step 'Install JavaScript dependencies' pnpm install --frozen-lockfile
+step 'Generate the Prisma client' pnpm build-db-client
+step 'Apply database migrations' pnpm update-db
+
+printf '\nOrb setup complete.\n'
