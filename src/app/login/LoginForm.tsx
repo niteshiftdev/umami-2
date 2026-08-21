@@ -63,6 +63,7 @@ export function LoginForm() {
           <FormSubmitButton
             data-test="button-submit"
             variant="primary"
+            className="bg-green-600"
             style={{ flex: 1 }}
             isDisabled={false}
           >
