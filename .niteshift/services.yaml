@@ -1,0 +1,32 @@
+services:
+  - name: database
+    command: >-
+      docker run --rm --name niteshift-umami-db
+      --publish 127.0.0.1:5432:5432
+      --env POSTGRES_DB
+      --env POSTGRES_USER
+      --env POSTGRES_PASSWORD
+      --volume niteshift-umami-db:/var/lib/postgresql/data
+      postgres:15-alpine
+    restart: on-failure
+    stopGracePeriod: 15s
+    environment:
+      - name: POSTGRES_DB
+        value: umami
+      - name: POSTGRES_USER
+        value: umami
+      - name: POSTGRES_PASSWORD
+        value: umami
+
+  - name: web
+    command: pnpm dev
+    port: 3000
+    restart: on-failure
+    stopGracePeriod: 15s
+    environment:
+      - name: DATABASE_URL
+        value: postgresql://umami:umami@localhost:5432/umami
+      - name: APP_SECRET
+        value: niteshift-local-umami
+      - name: ALLOWED_FRAME_URLS
+        value: https://niteshift.dev https://*.niteshift.dev

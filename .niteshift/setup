@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+task_database_url='postgresql://umami:umami@localhost:5432/umami'
+
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+
+ns services start database
+timeout 60 bash -c 'until docker exec niteshift-umami-db pg_isready -U umami -d umami; do sleep 1; done'
+
+DATABASE_URL="$task_database_url" pnpm build-db
+DATABASE_URL="$task_database_url" pnpm update-db

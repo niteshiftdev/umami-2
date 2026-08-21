@@ -208,6 +208,7 @@ if (isProd && cloudMode) {
 /** @type {import('next').NextConfig} */
 export default withNextIntl({
   reactStrictMode: false,
+  allowedDevOrigins: ['*.preview.niteshift.dev'],
   env: {
     apiUrl,
     basePath,
