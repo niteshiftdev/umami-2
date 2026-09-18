@@ -23,10 +23,14 @@ services:
       - name: APP_SECRET
         value: niteshift-dev-app-secret
       # Lets the Niteshift preview panel iframe the app (frame-ancestors).
+      # Space-separated; both Niteshift domains, since a sandbox may be served
+      # from either one.
       - name: ALLOWED_FRAME_URLS
-        value: https://niteshift.dev https://*.niteshift.dev
-      # Lets the Next dev server accept requests from the preview host.
+        value: https://niteshift.dev https://*.niteshift.dev https://niteshift.local https://*.niteshift.local
+      # Lets the Next dev server accept requests from the preview host, which is
+      # cross-origin: without this, /_next/* answers 403 and the panel renders a
+      # scriptless page. Comma-separated (next.config.ts).
       - name: ALLOWED_DEV_ORIGINS
-        value: "*.preview.niteshift.dev"
+        value: "*.preview.niteshift.dev,*.preview.niteshift.local"
       - name: DISABLE_TELEMETRY
         value: "1"
